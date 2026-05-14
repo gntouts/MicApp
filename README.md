@@ -5,6 +5,8 @@ A simple Android app that captures real-time audio from a microphone input and r
 The app was developed in under an hour using Github Copilot with Claude Sonnet 4.6. The prompt for the planning session can be found in
 [Project Specification](./Project-Specification.md) file.
 
+![MicApp screenshot](img/screenshot.jpg)
+
 ## Features
 
 - Select any available audio input (built-in mic, USB mic, headset, etc.)
