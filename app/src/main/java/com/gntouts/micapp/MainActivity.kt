@@ -6,6 +6,9 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Bundle
+import android.view.MotionEvent
+import android.view.View
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
@@ -14,6 +17,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.material.button.MaterialButtonToggleGroup
 
 class MainActivity : AppCompatActivity() {
 
@@ -22,8 +26,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spinnerOutput: Spinner
     private lateinit var btnToggle: Button
     private lateinit var tvStatus: TextView
+    private lateinit var modeToggleGroup: MaterialButtonToggleGroup
 
     private val passthrough = AudioPassthrough()
+    private var isPttMode = false
+    private var isRefreshingDevices = false
+    private var listenersSetUp = false
 
     private var inputDevices: List<AudioDeviceInfo> = emptyList()
     private var outputDevices: List<AudioDeviceInfo> = emptyList()
@@ -65,11 +73,17 @@ class MainActivity : AppCompatActivity() {
         spinnerOutput = findViewById(R.id.spinnerOutput)
         btnToggle = findViewById(R.id.btnToggle)
         tvStatus = findViewById(R.id.tvStatus)
+        modeToggleGroup = findViewById(R.id.modeToggleGroup)
 
-        btnToggle.setOnClickListener {
-            if (passthrough.isRunning) stopPassthrough() else startPassthrough()
+        modeToggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (isChecked) {
+                isPttMode = checkedId == R.id.btnModePtt
+                if (passthrough.isRunning) stopPassthrough()
+                applyModeListeners()
+            }
         }
 
+        applyModeListeners()
         checkPermissions()
     }
 
@@ -103,9 +117,56 @@ class MainActivity : AppCompatActivity() {
     private fun onPermissionsGranted() {
         refreshDeviceLists()
         btnToggle.isEnabled = true
+        applyModeListeners()
+        if (!listenersSetUp) {
+            setupSpinnerListeners()
+            listenersSetUp = true
+        }
+    }
+
+    private fun applyModeListeners() {
+        if (isPttMode) {
+            // Start pipeline muted so it is warm and ready — no startup latency on press
+            if (!passthrough.isRunning) {
+                val inputDevice = inputDevices.getOrNull(spinnerInput.selectedItemPosition)
+                val outputDevice = outputDevices.getOrNull(spinnerOutput.selectedItemPosition)
+                passthrough.muted = true
+                passthrough.start(inputDevice, outputDevice)
+            }
+            btnToggle.text = getString(R.string.btn_ptt)
+            btnToggle.setOnClickListener(null)
+            btnToggle.setOnTouchListener { _, event ->
+                if (!btnToggle.isEnabled) return@setOnTouchListener false
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        passthrough.muted = false
+                        tvStatus.text = getString(R.string.status_active)
+                        tvStatus.setTextColor(getColor(R.color.status_active))
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        passthrough.muted = true
+                        tvStatus.text = getString(R.string.status_stopped)
+                        tvStatus.setTextColor(getColor(R.color.status_stopped))
+                        true
+                    }
+                    else -> false
+                }
+            }
+        } else {
+            // Leaving PTT mode — stop the always-on pipeline
+            if (passthrough.isRunning) stopPassthrough()
+            passthrough.muted = false
+            btnToggle.text = getString(R.string.btn_start)
+            btnToggle.setOnTouchListener(null)
+            btnToggle.setOnClickListener {
+                if (passthrough.isRunning) stopPassthrough() else startPassthrough()
+            }
+        }
     }
 
     private fun refreshDeviceLists() {
+        isRefreshingDevices = true
         inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList()
         outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
 
@@ -118,11 +179,42 @@ class MainActivity : AppCompatActivity() {
         spinnerOutput.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item, outputNames
         )
+        // Reset flag after any pending onItemSelected callbacks from adapter replacement have fired
+        spinnerInput.post { isRefreshingDevices = false }
+    }
+
+    private fun setupSpinnerListeners() {
+        val listener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (!isRefreshingDevices) restartStream()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        spinnerInput.onItemSelectedListener = listener
+        spinnerOutput.onItemSelectedListener = listener
+    }
+
+    // Stop and restart the active pipeline with current device selections.
+    // No-op if nothing is running (continuous mode, stopped).
+    private fun restartStream() {
+        if (!passthrough.isRunning) return
+        val wasActive = !passthrough.muted
+        passthrough.stop()
+        val inputDevice = inputDevices.getOrNull(spinnerInput.selectedItemPosition)
+        val outputDevice = outputDevices.getOrNull(spinnerOutput.selectedItemPosition)
+        passthrough.muted = isPttMode   // PTT always restarts muted; continuous restarts unmuted
+        passthrough.start(inputDevice, outputDevice)
+        if (wasActive && !isPttMode) {
+            btnToggle.text = getString(R.string.btn_stop)
+            tvStatus.text = getString(R.string.status_active)
+            tvStatus.setTextColor(getColor(R.color.status_active))
+        }
     }
 
     private fun startPassthrough() {
         val inputDevice = inputDevices.getOrNull(spinnerInput.selectedItemPosition)
         val outputDevice = outputDevices.getOrNull(spinnerOutput.selectedItemPosition)
+        passthrough.muted = false
         passthrough.start(inputDevice, outputDevice)
         btnToggle.text = getString(R.string.btn_stop)
         tvStatus.text = getString(R.string.status_active)

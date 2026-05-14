@@ -14,6 +14,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 class AudioPassthrough {
 
@@ -23,6 +25,8 @@ class AudioPassthrough {
     private var audioTrack: AudioTrack? = null
     private var aec: AcousticEchoCanceler? = null
     private var ns: NoiseSuppressor? = null
+
+    @Volatile var muted: Boolean = false
 
     val isRunning: Boolean
         get() = job?.isActive == true
@@ -91,6 +95,7 @@ class AudioPassthrough {
             while (isActive) {
                 val read = record.read(buffer, 0, buffer.size)
                 if (read > 0) {
+                    if (muted) buffer.fill(0, 0, read)
                     track.write(buffer, 0, read)
                 }
             }
@@ -98,20 +103,17 @@ class AudioPassthrough {
     }
 
     fun stop() {
-        job?.cancel()
+        val j = job
         job = null
-        try {
-            audioRecord?.stop()
-            audioTrack?.stop()
-        } catch (_: IllegalStateException) {
-        }
-        aec?.release()
-        aec = null
-        ns?.release()
-        ns = null
-        audioRecord?.release()
-        audioRecord = null
-        audioTrack?.release()
-        audioTrack = null
+        // Stop the record first — this unblocks any pending record.read() call immediately
+        try { audioRecord?.stop() } catch (_: Exception) {}
+        j?.cancel()
+        // Wait for the coroutine to fully exit before releasing resources
+        runBlocking { withTimeoutOrNull(500) { j?.join() } }
+        aec?.release(); aec = null
+        ns?.release(); ns = null
+        audioRecord?.release(); audioRecord = null
+        try { audioTrack?.stop() } catch (_: Exception) {}
+        audioTrack?.release(); audioTrack = null
     }
 }

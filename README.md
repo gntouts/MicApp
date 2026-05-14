@@ -5,7 +5,12 @@ A simple Android app that captures real-time audio from a microphone input and r
 The initial version of this app was developed in under an hour using Github Copilot with Claude Sonnet 4.6. The prompt for the planning session can be found in
 [Project Specification](./Project-Specification.md) file.
 
-![MicApp screenshot](img/screenshot.jpg)
+<table>
+  <tr>
+    <td align="center"><img src="img/screenshot_continuous.png" width="300"/><br/><sub>Continuous mode</sub></td>
+    <td align="center"><img src="img/screenshot_ptt.png" width="300"/><br/><sub>Push to Talk mode</sub></td>
+  </tr>
+</table>
 
 ## Features
 
@@ -13,7 +18,8 @@ The initial version of this app was developed in under an hour using Github Copi
 - Select any available audio output (Bluetooth A2DP/BLE, wired headphones, speaker, etc.)
 - Device list updates automatically when a Bluetooth device connects or disconnects
 - Single toggle button to start / stop passthrough
-- Use Android's built-in `AcousticEchoCanceler` to pervent feedback loops
+- Use Android's built-in `AcousticEchoCanceler` to prevent feedback loops (not working very well :D)
+- Add PTT (push to talk) mode to manually prevent feedback loops
 
 ## Requirements
 
