@@ -2,7 +2,7 @@
 
 A simple Android app that captures real-time audio from a microphone input and replays it through a selected output device (Bluetooth speaker, wired headphones, built-in speaker, etc.).
 
-The app was developed in under an hour using Github Copilot with Claude Sonnet 4.6. The prompt for the planning session can be found in
+The initial version of this app was developed in under an hour using Github Copilot with Claude Sonnet 4.6. The prompt for the planning session can be found in
 [Project Specification](./Project-Specification.md) file.
 
 ![MicApp screenshot](img/screenshot.jpg)
@@ -13,6 +13,7 @@ The app was developed in under an hour using Github Copilot with Claude Sonnet 4
 - Select any available audio output (Bluetooth A2DP/BLE, wired headphones, speaker, etc.)
 - Device list updates automatically when a Bluetooth device connects or disconnects
 - Single toggle button to start / stop passthrough
+- Use Android's built-in `AcousticEchoCanceler` to pervent feedback loops
 
 ## Requirements
 

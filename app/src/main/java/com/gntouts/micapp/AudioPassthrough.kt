@@ -6,6 +6,8 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,6 +21,8 @@ class AudioPassthrough {
     private var job: Job? = null
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
+    private var aec: AcousticEchoCanceler? = null
+    private var ns: NoiseSuppressor? = null
 
     val isRunning: Boolean
         get() = job?.isActive == true
@@ -46,6 +50,14 @@ class AudioPassthrough {
             .build()
 
         inputDevice?.let { record.preferredDevice = it }
+
+        // Suppress the speaker signal leaking back into the mic (feedback loop)
+        if (AcousticEchoCanceler.isAvailable()) {
+            aec = AcousticEchoCanceler.create(record.audioSessionId)?.also { it.enabled = true }
+        }
+        if (NoiseSuppressor.isAvailable()) {
+            ns = NoiseSuppressor.create(record.audioSessionId)?.also { it.enabled = true }
+        }
 
         val track = AudioTrack.Builder()
             .setAudioAttributes(
@@ -93,6 +105,10 @@ class AudioPassthrough {
             audioTrack?.stop()
         } catch (_: IllegalStateException) {
         }
+        aec?.release()
+        aec = null
+        ns?.release()
+        ns = null
         audioRecord?.release()
         audioRecord = null
         audioTrack?.release()
